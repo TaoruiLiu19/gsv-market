@@ -1,0 +1,33 @@
+name: build-meta
+
+on:
+  push:
+    branches: ["master", "main"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 用 voices.json 内容的 sha1 作为缓存键，写入 build-meta.json
+      - name: Compute voices hash and write build-meta.json
+        run: |
+          HASH=$(git hash-object voices.json)
+          printf '{"voicesHash":"%s"}\n' "$HASH" > build-meta.json
+          cat build-meta.json
+
+      - name: Commit build-meta.json if changed
+        run: |
+          if ! git diff --quiet -- build-meta.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add build-meta.json
+            git commit -m "chore: refresh build-meta cache key"
+            git push
+          else
+            echo "build-meta.json unchanged, skip commit"
+          fi

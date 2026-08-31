@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>dsh-gsv 音色市场</title>
+  <style>
+    :root{
+      --accent:#3b82f6;
+      --bg:#fafafa;
+      --card:#ffffff;
+      --text:#1f2328;
+      --muted:#6b7280;
+      --border:#e5e7eb;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+      background:var(--bg);color:var(--text);line-height:1.6;padding:40px 20px 60px;
+    }
+    .wrap{max-width:960px;margin:0 auto;}
+    header{padding:8px 0 28px;}
+    header h1{font-size:28px;font-weight:650;letter-spacing:.5px;}
+    header p.sub{color:var(--muted);font-size:14px;margin-top:6px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+    .btn-install{
+      display:inline-block;margin-left:auto;background:var(--accent);color:#fff;
+      padding:7px 16px;border-radius:20px;font-size:13px;text-decoration:none;transition:opacity .15s;
+    }
+    .btn-install:hover{opacity:.88;}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
+    .card{
+      background:var(--card);border:1px solid var(--border);border-radius:12px;
+      padding:18px;transition:transform .12s ease,box-shadow .12s ease;
+    }
+    .card:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.06);}
+    .card .name{font-size:16px;font-weight:600;}
+    .card .meta{color:var(--muted);font-size:12px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;
+      white-space:nowrap;}
+    .words{
+      margin-top:10px;padding:10px 12px;background:#f3f4f6;border-left:3px solid var(--accent);
+      border-radius:4px;font-size:13px;color:#374151;line-height:1.7;white-space:pre-wrap;word-break:break-word;
+      max-height:132px;overflow-y:auto;
+    }
+    .playbar{display:flex;align-items:center;gap:10px;margin:14px 0 6px;}
+    .play-btn{
+      width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;
+      font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+      flex:0 0 auto;transition:opacity .15s;
+    }
+    .play-btn:hover{opacity:.85;}
+    .duration{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;}
+    .prog{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden;cursor:pointer;}
+    .prog > i{display:block;height:100%;background:var(--accent);width:0;}
+    .actions{margin-top:10px;display:flex;gap:8px;}
+    .btn{
+      font-size:12px;padding:6px 12px;border-radius:16px;border:1px solid var(--border);
+      background:#fff;color:var(--text);cursor:pointer;transition:background .12s;
+    }
+    .btn:hover{background:#f3f4f6;}
+    .toast{
+      position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);background:#1f2328;color:#fff;
+      padding:9px 16px;border-radius:18px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;
+    }
+    .toast.show{opacity:1;transform:translate(-50%,0);}
+    footer{color:var(--muted);font-size:12px;text-align:center;margin-top:36px;}
+    .state{color:var(--muted);font-size:13px;padding:40px 0;text-align:center;}
+    .hl{color:#dc2626;font-weight:600;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>dsh-gsv 音色市场</h1>
+      <p class="sub">
+        <span>浏览 · 试听 · 获取音色</span>
+        <a class="btn-install" href="#" onclick="copyInstall();return false;">复制安装命令</a>
+      </p>
+    </header>
+    <main id="list"><div class="state">加载中…</div></main>
+    <footer>试听仅供参考，克隆音色以安装后合成为准 · 清单版本 <span id="ver" style="font-variant-numeric:tabular-nums">—</span></footer>
+  </div>
+  <div class="toast" id="toast"></div>
+  <audio id="dummyA" preload="none"></audio>
+
+  <script>
+    const REPO = "TaoruiLiu19/dsh-gsv";
+    const INSTALL_CMD = "dsh plugin add dsh-gsv-tts";
+
+    // 优先 jsDelivr（国内快），失败再回落 raw.githubusercontent。url 为 voices.json 中存的原生地址。
+    function assetUrl(url, id){
+      const raw = "raw.githubusercontent.com/" + REPO + "/master/docs/voices/";
+      if(url.includes(raw)){
+        const file = url.split(raw)[1];
+        return "https://cdn.jsdelivr.net/gh/" + REPO + "@master/docs/voices/" + file;
+      }
+      return url;
+    }
+
+    function fmt(n){
+      if(n >= 1048576) return (n/1048576).toFixed(1) + " MB";
+      if(n >= 1024) return (n/1024).toFixed(0) + " KB";
+      return n + " B";
+    }
+
+    async function fetchJson(url, tries){
+      for(let i = 0; i < (tries || 2); i++){
+        try{
+          const r = await fetch(url, {cache:"no-store"});
+          if(r.ok) return await r.json();
+        }catch(e){}
+        // 失败在下一个 try 直接退回 raw，不重试页内链路
+        return null;
+      }
+      return null;
+    }
+
+    async function load(){
+      const list = document.getElementById("list");
+      // 1) 读 build-meta.json 拿缓存键（commitHash）
+      let meta = null;
+      try{
+        meta = await (await fetch("./build-meta.json", {cache:"no-store"})).json();
+      }catch(e){}
+      const key = (meta && meta.voicesHash) ? meta.voicesHash : "schema1";
+      // 2) 按版本号拉取清单
+      let data = await fetchJson("./voices.json?v=" + key);
+      if(!data) data = await fetchJson("./voices.json");
+
+      if(!data || !Array.isArray(data.voices) || data.voices.length === 0){
+        list.innerHTML = '<div class="state">暂无可展示的音色。</div>';
+        return;
+      }
+
+      document.getElementById("ver").textContent = data.version || key;
+
+      list.innerHTML = data.voices.map(v => {
+        const src = assetUrl(v.speaker, v.id);
+        return `<article class="card" data-id="${esc(v.id)}">
+          <div class="name">${esc(v.name)}</div>
+          <div class="meta">${esc(v.author || "")} · ${esc(v.license || "")} · ${fmt(v.sizeBytes)}</div>
+          <div class="words">${esc(v.promptText || "")}</div>
+          <div class="playbar">
+            <button class="play-btn" data-src="${esc(src)}" aria-label="试听">▶</button>
+            <div class="prog" data-role="prog"><i></i></div>
+            <span class="duration" data-role="dur">0:00</span>
+          </div>
+          <div class="actions">
+            <button class="btn" data-role="download" data-src="${esc(src)}" data-name="${esc(v.id + ".mp3")}">下载音频</button>
+          </div>
+        </article>`;
+      }).join("");
+
+      bindAudio();
+      bindDownload();
+    }
+
+    // 单一共享 audio，冒充单播放实例，点击即切。
+    let currentBtn = null;
+    function bindAudio(){
+      const A = document.getElementById("dummyA");
+      document.querySelectorAll(".play-btn").forEach(btn=>{
+        btn.addEventListener("click", ()=>{
+          if(A.src.split("?")[0] !== btn.dataset.src){
+            A.src = btn.dataset.src;
+            currentBtn = btn;
+            setLabel("⏸");
+          } else {
+            if(A.paused){ A.play(); setLabel("⏸"); }
+            else { A.pause(); setLabel("▶"); }
+          }
+          A.play();
+        });
+      });
+      A.addEventListener("ended", ()=>{ setLabel("▶"); });
+      A.addEventListener("error", ()=>{ toast("试听加载失败，请稍后再试"); setLabel("▶"); });
+      A.addEventListener("timeupdate", ()=>{
+        const card = currentBtn && currentBtn.closest(".card");
+        if(!card) return;
+        const prog = card.querySelector('[data-role="prog"]');
+        const dur = card.querySelector('[data-role="dur"]');
+        if(A.duration && isFinite(A.duration)){
+          prog.querySelector("i").style.width = (A.currentTime / A.duration * 100) + "%";
+        }
+        dur.textContent = fmtTime(A.currentTime);
+      });
+      document.querySelectorAll('[data-role="prog"]').forEach(bar=>{
+        bar.addEventListener("click", (e)=>{
+          if(!A.duration) return;
+          const r = bar.getBoundingClientRect();
+          A.currentTime = (e.clientX - r.left) / r.width * A.duration;
+        });
+      });
+    }
+    function setLabel(t){ if(currentBtn) currentBtn.textContent = t; }
+
+    function bindDownload(){
+      document.querySelectorAll('[data-role="download"]').forEach(btn=>{
+        btn.addEventListener("click", async ()=>{
+          downloadAsset(btn.dataset.src, btn.dataset.name);
+        });
+      });
+    }
+
+    // fetch 成 blob 再触发下载：跨域直链用 <a download> 会被浏览器忽略，改 blob 方式
+    async function downloadAsset(url, name){
+      toast("正在下载…");
+      try{
+        const r = await fetch(url);
+        if(!r.ok) throw new Error("HTTP " + r.status);
+        const blob = await r.blob();
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = name || "voice.mp3";
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+        toast("下载开始");
+      }catch(e){
+        toast("下载失败，请检查网络");
+      }
+    }
+
+    async function copyInstall(){
+      try{ await navigator.clipboard.writeText(INSTALL_CMD); toast("已复制：`dsh plugin add dsh-gsv-tts`"); }
+      catch(e){ toast("复制失败，请手动复制安装命令"); }
+    }
+
+    function fmtTime(s){
+      if(!isFinite(s) || s <= 0) return "0:00";
+      const m = Math.floor(s/60), sec = Math.floor(s%60);
+      return m + ":" + String(sec).padStart(2,"0");
+    }
+    function esc(s){
+      return String(s == null ? "" : s).replace(/[&<>"']/g, c => (({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]));
+    }
+
+    let toastTimer;
+    function toast(msg){
+      const t = document.getElementById("toast");
+      t.textContent = msg; t.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(()=>t.classList.remove("show"), 2000);
+    }
+
+    load();
+  </script>
+</body>
+</html>
