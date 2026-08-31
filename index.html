@@ -145,12 +145,14 @@
           </div>
           <div class="actions">
             <button class="btn" data-role="download" data-src="${esc(src)}" data-name="${esc(v.id + ".mp3")}">下载音频</button>
+            <button class="btn" data-role="install-cmd" data-id="${esc(v.id)}">复制安装命令</button>
           </div>
         </article>`;
       }).join("");
 
       bindAudio();
       bindDownload();
+      bindInstallCmd();
     }
 
     // 单一共享 audio，冒充单播放实例，点击即切。
@@ -217,6 +219,20 @@
       }catch(e){
         toast("下载失败，请检查网络");
       }
+    }
+
+    function bindInstallCmd(){
+      document.querySelectorAll('[data-role="install-cmd"]').forEach(btn=>{
+        btn.addEventListener("click", async ()=>{
+          const text = "帮我安装音色 " + btn.dataset.id + "（来自 dsh-gsv-tts 音色市场）";
+          try{
+            await navigator.clipboard.writeText(text);
+            toast("已复制安装命令，请在 DSH 对话框粘贴");
+          }catch(e){
+            toast("复制失败，请手动复制");
+          }
+        });
+      });
     }
 
     function fmtTime(s){
