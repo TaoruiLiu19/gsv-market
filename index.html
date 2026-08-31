@@ -73,7 +73,7 @@
       <h1>dsh-gsv 音色市场</h1>
       <p class="sub">
         <span>浏览 · 试听 · 获取音色</span>
-        <a class="btn-install" href="#" onclick="copyInstall();return false;">复制安装命令</a>
+        <a class="btn-install" href="https://github.com/TaoruiLiu19/dsh-gsv" target="_blank" rel="noopener">前往插件仓库</a>
       </p>
     </header>
     <main id="list"><div class="state">加载中…</div></main>
@@ -84,7 +84,6 @@
 
   <script>
     const REPO = "TaoruiLiu19/dsh-gsv";
-    const INSTALL_CMD = "dsh plugin add dsh-gsv-tts";
 
     // 优先 jsDelivr（国内快），失败再回落 raw.githubusercontent。url 为 voices.json 中存的原生地址。
     function assetUrl(url, id){
@@ -218,11 +217,6 @@
       }catch(e){
         toast("下载失败，请检查网络");
       }
-    }
-
-    async function copyInstall(){
-      try{ await navigator.clipboard.writeText(INSTALL_CMD); toast("已复制：`dsh plugin add dsh-gsv-tts`"); }
-      catch(e){ toast("复制失败，请手动复制安装命令"); }
     }
 
     function fmtTime(s){
