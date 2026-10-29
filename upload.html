@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>上传音色 · dsh-gsv 音色市场</title>
+  <style>
+    :root{
+      --accent:#3b82f6;
+      --bg:#fafafa;
+      --card:#ffffff;
+      --text:#1f2328;
+      --muted:#6b7280;
+      --border:#e5e7eb;
+      --ok:#059669;
+      --warn:#d97706;
+      --danger:#dc2626;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+      background:var(--bg);color:var(--text);line-height:1.6;padding:40px 20px 60px;
+    }
+    .wrap{max-width:820px;margin:0 auto;}
+    header{padding:8px 0 22px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+    header h1{font-size:26px;font-weight:650;letter-spacing:.4px;}
+    header .back{color:var(--muted);font-size:13px;text-decoration:none;}
+    header .back:hover{color:var(--accent);}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;margin-bottom:16px;}
+    .card h2{font-size:15px;font-weight:650;margin-bottom:12px;}
+    .card h2 .step{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;
+      background:var(--accent);color:#fff;font-size:12px;margin-right:8px;vertical-align:1px;}
+    .hint{color:var(--muted);font-size:12.5px;margin-top:6px;}
+    .drop{border:2px dashed var(--border);border-radius:12px;padding:26px;text-align:center;color:var(--muted);
+      font-size:13px;cursor:pointer;transition:border-color .15s,background .15s;background:#fbfbfc;}
+    .drop:hover,.drop.disabled{border-color:var(--accent);background:#f5f8ff;}
+    .drop strong{color:var(--text);}
+    .player{margin-top:14px;display:none;}
+    .player audio{width:100%;}
+    .stats{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-top:8px;}
+    .stats b{color:var(--text);font-weight:600;}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    @media (max-width:640px){ .row{grid-template-columns:1fr;} }
+    label.field{display:block;margin-bottom:12px;}
+    label.field > span{display:block;font-size:12.5px;color:#374151;margin-bottom:5px;font-weight:500;}
+    label.field em{font-style:normal;color:var(--danger);}
+    input[type=text],input[type=url],select,textarea{
+      width:100%;border:1px solid var(--border);border-radius:9px;padding:8px 10px;font:inherit;font-size:13px;
+      background:#fff;color:var(--text);outline:none;
+    }
+    input[type=text]:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.12);}
+    textarea{min-height:78px;resize:vertical;}
+    .consent{display:flex;gap:9px;align-items:flex-start;font-size:12.5px;color:#374151;margin:6px 0 4px;}
+    .consent input{margin-top:3px;}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:none;border-radius:10px;padding:10px 18px;
+      font:inherit;font-size:13.5px;cursor:pointer;background:var(--accent);color:#fff;transition:opacity .15s;}
+    .btn:hover{opacity:.9;}
+    .btn.secondary{background:#fff;color:var(--text);border:1px solid var(--border);}
+    .btn:disabled{opacity:.45;cursor:not-allowed;}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;}
+    .status{margin-top:12px;font-size:13px;padding:10px 12px;border-radius:9px;display:none;}
+    .status.show{display:block;}
+    .status.err{background:#fef2f2;color:var(--danger);border:1px solid #fecaca;}
+    .status.ok{background:#ecfdf5;color:var(--ok);border:1px solid #a7f3d0;}
+    .status.info{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;}
+    .result{margin-top:10px;font-size:13px;}
+    .result a{color:var(--accent);}
+    footer{color:var(--muted);font-size:12px;text-align:center;margin-top:30px;line-height:1.8;}
+    .tag{display:inline-block;background:#f3f4f6;border-radius:999px;padding:1px 8px;font-size:11px;color:#4b5563;margin-left:4px;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <a class="back" href="./index.html">← 返回音色市场</a>
+      <h1>上传音色</h1>
+    </header>
+
+    <div class="card">
+      <h2><span class="step">1</span>选择或录制参考音频</h2>
+      <div class="drop" id="drop">
+        <input type="file" id="file" accept="audio/*,.wav,.mp3,.ogg,.flac,.m4a" hidden>
+        <div><strong>点击选择音频</strong>，或把文件拖到这里</div>
+        <div class="hint">支持 wav / mp3 / ogg / flac / m4a；超过 30 秒会自动截取前 30 秒；建议 5–15 秒、无背景音乐、单人说话。</div>
+      </div>
+      <div class="actions" style="margin-top:12px;">
+        <button class="btn secondary" id="record" type="button">● 录制一段</button>
+        <span class="hint" id="recordHint" style="align-self:center;">浏览器会请求麦克风权限</span>
+      </div>
+      <div class="player" id="player">
+        <audio id="preview" controls preload="metadata"></audio>
+        <div class="stats">
+          <span>时长 <b id="statDur">—</b></span>
+          <span>大小 <b id="statSize">—</b></span>
+          <span>格式 <b>单声道 24kHz WAV</b></span>
+          <span id="statCut" style="display:none;color:var(--warn);">已截取前 30 秒</span>
+        </div>
+      </div>
+      <div class="status" id="audioStatus"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="step">2</span>填写音色信息</h2>
+      <label class="field">
+        <span>音色名称 <em>*</em></span>
+        <input type="text" id="name" maxlength="60" placeholder="例如：中文女声·清晨">
+      </label>
+      <label class="field">
+        <span>作者姓名 <em>*</em> <span class="tag">会显示在音色卡片上</span></span>
+        <input type="text" id="author" maxlength="40" placeholder="例如：张三 / @your-github">
+      </label>
+      <label class="field">
+        <span>许可协议 <em>*</em></span>
+        <select id="license">
+          <option value="">请选择</option>
+          <option value="CC0 1.0（公共领域）">CC0 1.0（公共领域）</option>
+          <option value="CC BY 4.0（署名）">CC BY 4.0（署名）</option>
+          <option value="CC BY-SA 4.0（署名-相同方式共享）">CC BY-SA 4.0（署名-相同方式共享）</option>
+          <option value="作者明确授权分发">作者明确授权分发</option>
+        </select>
+      </label>
+      <div class="row">
+        <label class="field">
+          <span>语言</span>
+          <select id="language">
+            <option value="zh-CN">中文</option>
+            <option value="en-US">英语</option>
+            <option value="ja-JP">日语</option>
+            <option value="other">其他</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>标签（逗号分隔，可选）</span>
+          <input type="text" id="tags" maxlength="120" placeholder="例如：女声, 温柔, 普通话">
+        </label>
+      </div>
+      <label class="field">
+        <span>提示文本（音频里说的内容，可选）</span>
+        <textarea id="promptText" maxlength="2000" placeholder="填写音频对应的文字；留空时部分引擎会尝试自动转写。"></textarea>
+      </label>
+      <label class="consent">
+        <input type="checkbox" id="consent">
+        <span>我确认拥有该声音的合法分发授权，音频中不包含未经许可的他人声音、音乐或受版权保护的内容；同意按所选许可在本站公开展示与分发。</span>
+      </label>
+    </div>
+
+    <div class="card">
+      <h2><span class="step">3</span>生成音色包并提交</h2>
+      <p class="hint" style="margin-bottom:12px;">
+        点击后会生成一个 <code>.gsvvoice</code> 文件（内含音频与元数据），并打开 GitHub 新建投稿页面。
+        你只需要把下载好的文件拖进 Issue 正文，然后提交即可；维护者审核通过后自动上架。
+      </p>
+      <div class="actions">
+        <button class="btn" id="generate" type="button" disabled>生成音色包并打开 GitHub</button>
+        <a class="btn secondary" id="manualLink" style="display:none;" target="_blank" rel="noopener">手动打开投稿页</a>
+      </div>
+      <div class="status" id="submitStatus"></div>
+      <div class="result" id="result"></div>
+    </div>
+
+    <footer>
+      上传即表示同意本站展示与分发 · 如发现侵权请在本仓库提 Issue 申请下架<br>
+      音色包在浏览器本地生成，不会上传到第三方服务器 · <a href="./VOICE_MARKET.md" style="color:inherit;">投稿指南</a>
+    </footer>
+  </div>
+
+  <script type="module">
+    import { encodeWav, makeZip, sha256Hex, formatBytes } from './assets/pack.mjs';
+
+    const ISSUE_BASE = 'https://github.com/TaoruiLiu19/gsv-market/issues/new';
+    const MAX_SECONDS = 30;
+    const SAMPLE_RATE = 24000;
+
+    const $ = (id) => document.getElementById(id);
+    const fileInput = $('file');
+    const drop = $('drop');
+    const player = $('player');
+    const preview = $('preview');
+    const audioStatus = $('audioStatus');
+    const submitStatus = $('submitStatus');
+    const generateBtn = $('generate');
+    const recordBtn = $('record');
+    const recordHint = $('recordHint');
+    const manualLink = $('manualLink');
+
+    let wavBytes = null;
+    let wavDuration = 0;
+    let wavHash = '';
+    let wavName = 'voice';
+    let previewUrl = '';
+
+    function setStatus(el, kind, text) {
+      el.className = 'status show ' + kind;
+      el.textContent = text;
+    }
+    function hideStatus(el) { el.className = 'status'; el.textContent = ''; }
+
+    function setAudioReady(bytes, duration, cut, sourceName) {
+      wavBytes = bytes;
+      wavDuration = duration;
+      wavHash = '';
+      wavName = sourceName;
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      previewUrl = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
+      preview.src = previewUrl;
+      player.style.display = 'block';
+      $('statDur').textContent = duration.toFixed(1) + ' 秒';
+      $('statSize').textContent = formatBytes(bytes.length);
+      $('statCut').style.display = cut ? 'inline' : 'none';
+      generateBtn.disabled = false;
+      hideStatus(audioStatus);
+    }
+
+    async function processAudio(arrayBuffer, sourceName, mime) {
+      let ctx;
+      try {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
+        const duration = decoded.duration;
+        if (!Number.isFinite(duration) || duration < 1) throw new Error('音频太短（至少 1 秒）');
+        const usable = Math.min(duration, MAX_SECONDS);
+        const frames = Math.max(1, Math.ceil(usable * SAMPLE_RATE));
+        const offline = new OfflineAudioContext(1, frames, SAMPLE_RATE);
+        const source = offline.createBufferSource();
+        source.buffer = decoded;
+        source.connect(offline.destination);
+        source.start(0, 0, usable);
+        const rendered = await offline.startRendering();
+        const bytes = encodeWav(rendered.getChannelData(0), SAMPLE_RATE);
+        setAudioReady(bytes, usable, duration > MAX_SECONDS + 0.05, sourceName);
+        setStatus(audioStatus, 'info', `已处理：${formatBytes(bytes.length)}，单声道 24kHz WAV。提交后服务端会统一转成 64kbps MP3。`);
+      } catch (error) {
+        setStatus(audioStatus, 'err', '无法解析这个音频：' + (error?.message || error) + '。请换一个文件，或录制一段。');
+      } finally {
+        try { await ctx?.close(); } catch {}
+      }
+    }
+
+    async function handleFile(file) {
+      if (!file) return;
+      if (file.size > 25 * 1024 * 1024) {
+        setStatus(audioStatus, 'err', '文件超过 25MB，请先裁剪或压缩。');
+        return;
+      }
+      const buffer = await file.arrayBuffer();
+      const base = (file.name || 'voice').replace(/\.[^.]+$/, '');
+      await processAudio(buffer, base, file.type);
+    }
+
+    fileInput.addEventListener('change', () => handleFile(fileInput.files?.[0]));
+    drop.addEventListener('click', () => fileInput.click());
+    drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('disabled'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('disabled'));
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      drop.classList.remove('disabled');
+      handleFile(e.dataTransfer?.files?.[0]);
+    });
+
+    let recorder = null;
+    let chunks = [];
+    recordBtn.addEventListener('click', async () => {
+      if (recorder && recorder.state === 'recording') {
+        recorder.stop();
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+        chunks = [];
+        const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : '';
+        recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+        recorder.ondataavailable = (event) => { if (event.data.size > 0) chunks.push(event.data); };
+        recorder.onstop = async () => {
+          stream.getTracks().forEach((track) => track.stop());
+          recordBtn.textContent = '● 录制一段';
+          recordHint.textContent = '处理录音中…';
+          const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+          const buffer = await blob.arrayBuffer();
+          await processAudio(buffer, 'recording', blob.type);
+          recordHint.textContent = '浏览器会请求麦克风权限';
+        };
+        recorder.start();
+        recordBtn.textContent = '■ 停止录制';
+        recordHint.textContent = '正在录制，建议 5–15 秒';
+      } catch (error) {
+        setStatus(audioStatus, 'err', '无法使用麦克风：' + (error?.message || error));
+      }
+    });
+
+    function parseTags(text) {
+      return text.split(/[,，]/).map((s) => s.trim()).filter(Boolean).slice(0, 10);
+    }
+
+    function validateForm() {
+      const name = $('name').value.trim();
+      const author = $('author').value.trim();
+      const license = $('license').value;
+      const consent = $('consent').checked;
+      if (!wavBytes) throw new Error('请先选择或录制音频');
+      if (!name) throw new Error('请填写音色名称');
+      if (name.length > 60) throw new Error('音色名称不能超过 60 字');
+      if (!author) throw new Error('请填写作者姓名');
+      if (author.length > 40) throw new Error('作者姓名不能超过 40 字');
+      if (!license) throw new Error('请选择许可协议');
+      if (!consent) throw new Error('请勾选授权声明');
+      return {
+        name,
+        author,
+        license,
+        consent,
+        promptText: $('promptText').value.trim(),
+        language: $('language').value,
+        tags: parseTags($('tags').value),
+      };
+    }
+
+    function issueBody(filename, meta) {
+      return [
+        '<!-- gsv-voice-submission:v1 -->',
+        '',
+        '### 音色包',
+        '',
+        `请把刚下载的 \`${filename}\` 拖到下面（拖拽上传）：`,
+        '',
+        '<!-- 在这里拖入 .gsvvoice 文件 -->',
+        '',
+        '### 投稿信息',
+        '',
+        `- 名称：${meta.name}`,
+        `- 作者：${meta.author}`,
+        `- 许可：${meta.license}`,
+        `- 标签：${meta.tags.length ? meta.tags.join('、') : '（无）'}`,
+        '',
+        '> 提交即表示确认拥有该声音的合法分发授权，并同意按所选许可公开展示与分发。',
+      ].join('\n');
+    }
+
+    generateBtn.addEventListener('click', async () => {
+      try {
+        hideStatus(submitStatus);
+        const meta = validateForm();
+        if (!wavHash) wavHash = await sha256Hex(wavBytes);
+        const sourceHash = wavHash;
+        const voiceJson = {
+          schema: 1,
+          kind: 'gsv-voice-pack',
+          name: meta.name,
+          author: meta.author,
+          license: meta.license,
+          promptText: meta.promptText,
+          tags: meta.tags,
+          language: meta.language,
+          consent: true,
+          source: {
+            format: 'wav',
+            durationSec: Number(wavDuration.toFixed(2)),
+            sizeBytes: wavBytes.length,
+            sha256: sourceHash,
+          },
+        };
+        const files = [
+          { name: 'voice.json', data: new TextEncoder().encode(JSON.stringify(voiceJson, null, 2) + '\n') },
+          { name: 'speaker.wav', data: wavBytes },
+        ];
+        const zip = makeZip(files);
+        const filename = `voice-${sourceHash.slice(0, 8)}.gsvvoice`;
+        const blob = new Blob([zip], { type: 'application/zip' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+        const title = `[音色投稿] ${meta.name} - ${meta.author}`;
+        const body = issueBody(filename, meta);
+        const issueUrl = `${ISSUE_BASE}?template=voice-submission.md&title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+        manualLink.href = issueUrl;
+        manualLink.style.display = 'inline-flex';
+        window.open(issueUrl, '_blank', 'noopener');
+
+        setStatus(submitStatus, 'ok', `已生成 ${filename}（${formatBytes(zip.length)}）。请把文件拖进刚打开的 GitHub Issue，然后提交。`);
+        $('result').innerHTML = `下载链接：<a href="${url}" download="${filename}">${filename}</a> · ` +
+          `如果页面没有自动打开，请点上方“手动打开投稿页”。`;
+      } catch (error) {
+        setStatus(submitStatus, 'err', error?.message || String(error));
+      }
+    });
+
+    // 表单变化后提示需要重新生成（包内是生成瞬间的内容）
+    for (const id of ['name', 'author', 'license', 'language', 'tags', 'promptText']) {
+      $(id).addEventListener('input', () => {
+        if (submitStatus.classList.contains('ok')) {
+          setStatus(submitStatus, 'info', '信息已修改，请重新点击“生成音色包”以更新包内容。');
+        }
+      });
+    }
+  </script>
+</body>
+</html>

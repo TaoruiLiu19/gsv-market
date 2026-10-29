@@ -23,10 +23,12 @@
     header h1{font-size:28px;font-weight:650;letter-spacing:.5px;}
     header p.sub{color:var(--muted);font-size:14px;margin-top:6px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
     .btn-install{
-      display:inline-block;margin-left:auto;background:var(--accent);color:#fff;
+      display:inline-block;background:var(--accent);color:#fff;
       padding:7px 16px;border-radius:20px;font-size:13px;text-decoration:none;transition:opacity .15s;
     }
     .btn-install:hover{opacity:.88;}
+    .btn-upload{background:#10b981;}
+    .head-actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
     .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
     .card{
       background:var(--card);border:1px solid var(--border);border-radius:12px;
@@ -34,6 +36,9 @@
     }
     .card:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.06);}
     .card .name{font-size:16px;font-weight:600;}
+    .card .author{margin-top:5px;font-size:13px;color:#374151;word-break:break-all;}
+    .card .author .by{color:var(--muted);font-size:12px;margin-right:2px;}
+    .card .author b{color:#111827;font-weight:600;}
     .card .meta{color:var(--muted);font-size:12px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;
       white-space:nowrap;}
     .words{
@@ -73,11 +78,14 @@
       <h1>dsh-gsv 音色市场</h1>
       <p class="sub">
         <span>浏览 · 试听 · 获取音色</span>
-        <a class="btn-install" href="https://github.com/TaoruiLiu19/dsh-gsv" target="_blank" rel="noopener">前往插件仓库</a>
+        <span class="head-actions">
+          <a class="btn-install btn-upload" href="./upload.html">上传音色</a>
+          <a class="btn-install" href="https://github.com/TaoruiLiu19/dsh-gsv" target="_blank" rel="noopener">前往插件仓库</a>
+        </span>
       </p>
     </header>
     <main id="list"><div class="state">加载中…</div></main>
-    <footer>试听仅供参考，克隆音色以安装后合成为准 · 清单版本 <span id="ver" style="font-variant-numeric:tabular-nums">—</span></footer>
+    <footer>试听仅供参考，克隆音色以安装后合成为准 · 清单版本 <span id="ver" style="font-variant-numeric:tabular-nums">—</span> · <a href="./VOICE_MARKET.md" style="color:inherit;">投稿指南</a></footer>
   </div>
   <div class="toast" id="toast"></div>
   <audio id="dummyA" preload="none"></audio>
@@ -85,12 +93,19 @@
   <script>
     const REPO = "TaoruiLiu19/dsh-gsv";
 
-    // 优先 jsDelivr（国内快），失败再回落 raw.githubusercontent。url 为 voices.json 中存的原生地址。
+    // 优先 jsDelivr（国内快），失败再由调用方回落到原始地址。
+    // - 旧条目：raw.githubusercontent（dsh-gsv 仓库）
+    // - 新条目：GitHub Pages（gsv-market 仓库）
     function assetUrl(url, id){
       const raw = "raw.githubusercontent.com/" + REPO + "/master/docs/voices/";
       if(url.includes(raw)){
         const file = url.split(raw)[1];
         return "https://cdn.jsdelivr.net/gh/" + REPO + "@master/docs/voices/" + file;
+      }
+      const pages = "taoruiliu19.github.io/gsv-market/voices/";
+      if(url.includes(pages)){
+        const file = url.split(pages)[1];
+        return "https://cdn.jsdelivr.net/gh/TaoruiLiu19/gsv-market@main/voices/" + file;
       }
       return url;
     }
@@ -136,15 +151,16 @@
         const src = assetUrl(v.speaker, v.id);
         return `<article class="card" data-id="${esc(v.id)}">
           <div class="name">${esc(v.name)}</div>
-          <div class="meta">${esc(v.author || "")} · ${esc(v.license || "")} · ${fmt(v.sizeBytes)}</div>
+          <div class="author"><span class="by">作者</span><b>${esc(v.author || "未署名")}</b></div>
+          <div class="meta">${esc(v.license || "")} · ${fmt(v.sizeBytes)}</div>
           <div class="words">${esc(v.promptText || "")}</div>
           <div class="playbar">
-            <button class="play-btn" data-src="${esc(src)}" aria-label="试听">▶</button>
+            <button class="play-btn" data-src="${esc(src)}" data-raw="${esc(v.speaker)}" aria-label="试听">▶</button>
             <div class="prog" data-role="prog"><i></i></div>
             <span class="duration" data-role="dur">0:00</span>
           </div>
           <div class="actions">
-            <button class="btn" data-role="download" data-src="${esc(src)}" data-name="${esc(v.id + ".mp3")}">下载音频</button>
+            <button class="btn" data-role="download" data-src="${esc(src)}" data-raw="${esc(v.speaker)}" data-name="${esc(v.id + ".mp3")}">下载音频</button>
             <button class="btn" data-role="install-cmd" data-id="${esc(v.id)}">复制安装命令</button>
           </div>
         </article>`;
@@ -161,6 +177,7 @@
       const A = document.getElementById("dummyA");
       document.querySelectorAll(".play-btn").forEach(btn=>{
         btn.addEventListener("click", ()=>{
+          delete btn.dataset.fallback;
           if(A.src.split("?")[0] !== btn.dataset.src){
             A.src = btn.dataset.src;
             currentBtn = btn;
@@ -173,7 +190,18 @@
         });
       });
       A.addEventListener("ended", ()=>{ setLabel("▶"); });
-      A.addEventListener("error", ()=>{ toast("试听加载失败，请稍后再试"); setLabel("▶"); });
+      A.addEventListener("error", ()=>{
+        const btn = currentBtn;
+        const raw = btn && btn.dataset.raw;
+        // jsDelivr 对新提交可能有缓存延迟：失败一次就回落到清单里的原始地址
+        if(btn && raw && btn.dataset.fallback !== "1" && A.src !== raw){
+          btn.dataset.fallback = "1";
+          A.src = raw;
+          A.play().catch(()=>{});
+          return;
+        }
+        toast("试听加载失败，请稍后再试"); setLabel("▶");
+      });
       A.addEventListener("timeupdate", ()=>{
         const card = currentBtn && currentBtn.closest(".card");
         if(!card) return;
@@ -197,28 +225,31 @@
     function bindDownload(){
       document.querySelectorAll('[data-role="download"]').forEach(btn=>{
         btn.addEventListener("click", async ()=>{
-          downloadAsset(btn.dataset.src, btn.dataset.name);
+          downloadAsset(btn.dataset.src, btn.dataset.name, btn.dataset.raw);
         });
       });
     }
 
     // fetch 成 blob 再触发下载：跨域直链用 <a download> 会被浏览器忽略，改 blob 方式
-    async function downloadAsset(url, name){
+    async function downloadAsset(url, name, fallback){
       toast("正在下载…");
-      try{
-        const r = await fetch(url);
-        if(!r.ok) throw new Error("HTTP " + r.status);
-        const blob = await r.blob();
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = name || "voice.mp3";
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-        toast("下载开始");
-      }catch(e){
-        toast("下载失败，请检查网络");
+      const candidates = fallback && fallback !== url ? [url, fallback] : [url];
+      for(const candidate of candidates){
+        try{
+          const r = await fetch(candidate);
+          if(!r.ok) throw new Error("HTTP " + r.status);
+          const blob = await r.blob();
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = name || "voice.mp3";
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+          toast("下载开始");
+          return;
+        }catch(e){}
       }
+      toast("下载失败，请检查网络");
     }
 
     function bindInstallCmd(){

@@ -1,0 +1,118 @@
+name: voice-submission
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  # 全局串行：避免两个投稿同时改 voices.json 造成推送冲突
+  group: voice-submission
+  cancel-in-progress: false
+
+jobs:
+  process:
+    # 只在「新建/编辑投稿」或「添加 approved 标签」时运行；
+    # 本工作流自己添加 validated/invalid/published 标签不会再次触发。
+    if: >-
+      github.event.issue.pull_request == null &&
+      github.event.issue.state == 'open' &&
+      !contains(github.event.issue.labels.*.name, 'published') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'approved')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Ensure ffmpeg
+        run: |
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ffmpeg
+          fi
+          ffmpeg -version | head -n 1
+
+      - name: Ensure labels
+        run: |
+          gh label create validated --color 0E8A16 --description "校验通过，等待人工试听" --force
+          gh label create invalid --color B60205 --description "投稿未通过校验" --force
+          gh label create published --color 5319E7 --description "已发布到音色市场" --force
+
+      - name: Read issue body
+        run: |
+          gh issue view "$ISSUE_NUMBER" --json body --jq .body > "$RUNNER_TEMP/issue-body.md"
+          wc -c "$RUNNER_TEMP/issue-body.md"
+
+      - name: Validate submission
+        id: validate
+        continue-on-error: true
+        run: |
+          node scripts/submission.mjs validate \
+            --body "$RUNNER_TEMP/issue-body.md" \
+            --out "$RUNNER_TEMP/submission"
+
+      - name: Comment validation failure
+        if: steps.validate.outcome != 'success'
+        run: |
+          if [ -f "$RUNNER_TEMP/submission/error.md" ]; then
+            gh issue comment "$ISSUE_NUMBER" --body-file "$RUNNER_TEMP/submission/error.md"
+          else
+            gh issue comment "$ISSUE_NUMBER" --body "投稿校验失败，请查看 Actions 日志。"
+          fi
+          gh issue edit "$ISSUE_NUMBER" --add-label invalid --remove-label validated || true
+
+      - name: Comment validation success
+        if: steps.validate.outcome == 'success' && github.event.action != 'labeled'
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --body-file "$RUNNER_TEMP/submission/summary.md"
+          gh issue edit "$ISSUE_NUMBER" --add-label validated --remove-label invalid || true
+
+      - name: Publish (approved)
+        if: steps.validate.outcome == 'success' && github.event.action == 'labeled' && github.event.label.name == 'approved'
+        run: |
+          node scripts/submission.mjs publish \
+            --body "$RUNNER_TEMP/issue-body.md" \
+            --out "$RUNNER_TEMP/submission" \
+            --issue "$ISSUE_NUMBER"
+
+      - name: Comment published
+        if: success() && steps.validate.outcome == 'success' && github.event.action == 'labeled' && github.event.label.name == 'approved'
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --body-file "$RUNNER_TEMP/submission/published.md"
+          gh issue edit "$ISSUE_NUMBER" --add-label published --remove-label approved || true
+          gh issue close "$ISSUE_NUMBER" || true
+
+      - name: Comment publish failure
+        if: failure() && github.event.action == 'labeled' && github.event.label.name == 'approved'
+        run: |
+          if [ -f "$RUNNER_TEMP/submission/error.md" ]; then
+            gh issue comment "$ISSUE_NUMBER" --body-file "$RUNNER_TEMP/submission/error.md"
+          else
+            gh issue comment "$ISSUE_NUMBER" --body "发布失败，请查看 Actions 日志后重试。"
+          fi
+          gh issue edit "$ISSUE_NUMBER" --add-label invalid || true
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### 音色投稿处理结果" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 结果：${{ steps.validate.outcome == 'success' && '校验通过' || '校验失败' }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$RUNNER_TEMP/submission/published.md" ]; then
+            cat "$RUNNER_TEMP/submission/published.md" >> "$GITHUB_STEP_SUMMARY"
+          elif [ -f "$RUNNER_TEMP/submission/summary.md" ]; then
+            cat "$RUNNER_TEMP/submission/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          elif [ -f "$RUNNER_TEMP/submission/error.md" ]; then
+            cat "$RUNNER_TEMP/submission/error.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
