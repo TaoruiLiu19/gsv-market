@@ -37,10 +37,14 @@ GSV市场/
 1. 打开 `upload.html`，选择或录制音频（自动截取前 30 秒，转单声道 24kHz WAV）。
 2. 填写名称、**作者姓名**、许可、语言、标签、提示文本，勾选授权声明。
 3. 点击“生成音色包并打开 GitHub”，浏览器本地生成 `.gsvvoice`（`voice.json` + `speaker.wav`），并打开预填好的 Issue 页面。
-4. 把 `.gsvvoice` 拖进 Issue 正文，提交。
+4. **把 `.gsvvoice` 拖进 Issue 正文**（不是只写文件名），确认正文出现文件链接后再提交。
 5. Actions 自动校验：解压、`ffprobe` 检查时长/声道/采样率、`ffmpeg` 转单声道 64kbps MP3、算 SHA-256、查重；通过后评论摘要并打 `validated` 标签。
 6. 维护者试听后添加 `approved` 标签：Actions 重新校验并发布到 `voices/`、更新 `voices.json`，评论安装命令并关闭 Issue。
 7. Pages 部署完成后，站点与插件市场同时可见。
+
+> ⚠️ 最常见的失败是**附件没拖进去**：如果正文里只有 `voice-xxxxxxxx.gsvvoice` 文件名、没有文件链接，校验会失败并打上 `needs-attachment`。编辑 Issue 正文，把文件拖进去后保存即可自动重跑。
+>
+> 手机端不方便拖拽附件，建议用桌面浏览器；本地文件删了可重新打开上传页生成。
 
 ### 校验规则
 
@@ -61,6 +65,7 @@ GSV市场/
 |---|---|
 | `validated` | 自动校验通过，等待人工试听 |
 | `invalid` | 校验未通过，按评论提示修改后编辑 Issue 重试 |
+| `needs-attachment` | 正文缺少 `.gsvvoice` 附件，按评论步骤拖入文件 |
 | `approved` | 维护者批准，触发自动发布 |
 | `published` | 已发布并关闭 Issue |
 

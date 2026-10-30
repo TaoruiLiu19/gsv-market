@@ -65,6 +65,18 @@
     .status.info{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;}
     .result{margin-top:10px;font-size:13px;}
     .result a{color:var(--accent);}
+    .notice{margin:0 0 16px;padding:12px 14px;border-radius:10px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:13px;line-height:1.7;}
+    .notice b{color:#78350f;}
+    .notice code{background:#fef3c7;border-radius:4px;padding:1px 5px;font-size:12px;}
+    .result-steps{margin:12px 0 10px;padding:0;list-style:none;}
+    .result-steps li{position:relative;padding:6px 0 6px 30px;font-size:13px;color:#374151;}
+    .result-steps li::before{content:counter(step);counter-increment:step;position:absolute;left:0;top:6px;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;}
+    .result-steps{counter-reset:step;}
+    .result-steps code{background:#f3f4f6;border-radius:4px;padding:1px 5px;font-size:12px;}
+    .drag-demo{display:flex;align-items:center;gap:10px;margin:12px 0;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;background:#fbfbfc;font-size:12px;color:var(--muted);}
+    .drag-demo .file{display:flex;align-items:center;gap:6px;padding:8px 10px;background:#fff;border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;box-shadow:0 1px 2px rgba(0,0,0,.04);max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .drag-demo .arrow{font-size:16px;color:var(--accent);flex:0 0 auto;}
+    .drag-demo .box{flex:1;min-height:44px;border:2px dashed #bfdbfe;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#1d4ed8;background:#eff6ff;font-size:12px;padding:4px 8px;text-align:center;}
     footer{color:var(--muted);font-size:12px;text-align:center;margin-top:30px;line-height:1.8;}
     .tag{display:inline-block;background:#f3f4f6;border-radius:999px;padding:1px 8px;font-size:11px;color:#4b5563;margin-left:4px;}
   </style>
@@ -75,6 +87,12 @@
       <a class="back" href="./index.html">← 返回音色市场</a>
       <h1>上传音色</h1>
     </header>
+
+    <div class="notice">
+      <b>⚠️ 提交时必须把文件拖进 Issue 正文。</b>
+      生成 <code>.gsvvoice</code> 后，在打开的 GitHub 页面里把文件拖进正文，看到文件链接后再点 <b>Submit new issue</b>。
+      只写文件名或直接提交会校验失败。
+    </div>
 
     <div class="card">
       <h2><span class="step">1</span>选择或录制参考音频</h2>
@@ -152,7 +170,7 @@
       </p>
       <div class="actions">
         <button class="btn" id="generate" type="button" disabled>生成音色包并打开 GitHub</button>
-        <a class="btn secondary" id="manualLink" style="display:none;" target="_blank" rel="noopener">手动打开投稿页</a>
+        <a class="btn secondary" id="manualLink" style="display:none;" target="_blank" rel="noopener">打开 GitHub 提交页（已预填）</a>
       </div>
       <div class="status" id="submitStatus"></div>
       <div class="result" id="result"></div>
@@ -316,11 +334,11 @@
 
     function issueBody(filename, meta) {
       return [
-        '<!-- gsv-voice-submission:v1 -->',
+        '> ⚠️ **必须把 `.gsvvoice` 文件拖进下面正文**；只写文件名或直接提交会校验失败。',
         '',
         '### 音色包',
         '',
-        `请把刚下载的 \`${filename}\` 拖到下面（拖拽上传）：`,
+        `把刚下载的 \`${filename}\` 拖到这一行下面（拖拽上传）；拖入成功后正文会出现一个文件链接。`,
         '',
         '<!-- 在这里拖入 .gsvvoice 文件 -->',
         '',
@@ -372,7 +390,7 @@
         document.body.appendChild(link);
         link.click();
         link.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        setTimeout(() => URL.revokeObjectURL(url), 600000);
 
         const title = `[音色投稿] ${meta.name} - ${meta.author}`;
         const body = issueBody(filename, meta);
@@ -381,9 +399,21 @@
         manualLink.style.display = 'inline-flex';
         window.open(issueUrl, '_blank', 'noopener');
 
-        setStatus(submitStatus, 'ok', `已生成 ${filename}（${formatBytes(zip.length)}）。请把文件拖进刚打开的 GitHub Issue，然后提交。`);
-        $('result').innerHTML = `下载链接：<a href="${url}" download="${filename}">${filename}</a> · ` +
-          `如果页面没有自动打开，请点上方“手动打开投稿页”。`;
+        setStatus(submitStatus, 'ok', `已生成 ${filename}（${formatBytes(zip.length)}）。下一步：在打开的 GitHub 页面里把文件拖进正文，再点 Submit new issue。`);
+        $('result').innerHTML = `
+          <ol class="result-steps">
+            <li>文件已生成：<code>${filename}</code> · <a href="${url}" download="${filename}">重新下载</a></li>
+            <li>在打开的 GitHub 页面里，把这个文件 <b>拖进正文</b>（不要只写文件名）</li>
+            <li>正文出现文件链接后，点 <b>Submit new issue</b></li>
+          </ol>
+          <div class="drag-demo">
+            <span class="file">📄 ${filename}</span>
+            <span class="arrow">➜</span>
+            <span class="box">把文件拖到这里（Issue 正文）</span>
+          </div>
+          <div class="hint">页面没有自动打开？点上方「打开 GitHub 提交页（已预填）」；手机端不方便拖拽附件，建议用桌面浏览器。</div>
+        `;
+        $('result').scrollIntoView({ behavior: 'smooth', block: 'center' });
       } catch (error) {
         setStatus(submitStatus, 'err', error?.message || String(error));
       }

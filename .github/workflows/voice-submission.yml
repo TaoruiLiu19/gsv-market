@@ -48,6 +48,7 @@ jobs:
         run: |
           gh label create validated --color 0E8A16 --description "校验通过，等待人工试听" --force
           gh label create invalid --color B60205 --description "投稿未通过校验" --force
+          gh label create needs-attachment --color FBCA04 --description "Issue 正文缺少 .gsvvoice 附件" --force
           gh label create published --color 5319E7 --description "已发布到音色市场" --force
 
       - name: Read issue body
@@ -72,12 +73,16 @@ jobs:
             gh issue comment "$ISSUE_NUMBER" --body "投稿校验失败，请查看 Actions 日志。"
           fi
           gh issue edit "$ISSUE_NUMBER" --add-label invalid --remove-label validated || true
+          REASON=$(jq -r '.reason // empty' "$RUNNER_TEMP/submission/status.json" 2>/dev/null || true)
+          if [ "$REASON" = "missing-attachment" ]; then
+            gh issue edit "$ISSUE_NUMBER" --add-label needs-attachment || true
+          fi
 
       - name: Comment validation success
         if: steps.validate.outcome == 'success' && github.event.action != 'labeled'
         run: |
           gh issue comment "$ISSUE_NUMBER" --body-file "$RUNNER_TEMP/submission/summary.md"
-          gh issue edit "$ISSUE_NUMBER" --add-label validated --remove-label invalid || true
+          gh issue edit "$ISSUE_NUMBER" --add-label validated --remove-label invalid --remove-label needs-attachment || true
 
       - name: Publish (approved)
         if: steps.validate.outcome == 'success' && github.event.action == 'labeled' && github.event.label.name == 'approved'
@@ -91,7 +96,7 @@ jobs:
         if: success() && steps.validate.outcome == 'success' && github.event.action == 'labeled' && github.event.label.name == 'approved'
         run: |
           gh issue comment "$ISSUE_NUMBER" --body-file "$RUNNER_TEMP/submission/published.md"
-          gh issue edit "$ISSUE_NUMBER" --add-label published --remove-label approved || true
+          gh issue edit "$ISSUE_NUMBER" --add-label published --remove-label approved --remove-label needs-attachment --remove-label invalid || true
           gh issue close "$ISSUE_NUMBER" || true
 
       - name: Comment publish failure

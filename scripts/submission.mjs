@@ -96,8 +96,7 @@ function findAttachment(body) {
     ...body.matchAll(/https:\/\/github\.com\/user-attachments\/[^\s)<>"']+/g),
     ...body.matchAll(/https:\/\/user-images\.githubusercontent\.com\/[^\s)<>"']+/g),
   ].map((m) => m[0].replace(/[.,;]+$/, ''));
-  if (matches.length === 0) die('Issue 正文里没有找到附件：请把 .gsvvoice 文件拖进正文');
-  return matches;
+  return [...new Set(matches)];
 }
 
 async function download(url) {
@@ -151,6 +150,12 @@ async function validate(bodyPath, outDir, root, zipPath) {
   } else {
     const body = readFileSync(bodyPath, 'utf8');
     const attachments = findAttachment(body);
+    if (attachments.length === 0) {
+      if (/\.gsvvoice\b/i.test(body)) {
+        die('检测到文件名，但没有附件链接：文件没有真正拖进 Issue 正文。请在编辑正文时把 `.gsvvoice` 文件拖进去，确认正文出现文件链接后再保存。');
+      }
+      die('Issue 正文里没有找到附件：请把 `.gsvvoice` 文件拖进正文。');
+    }
     zipBytes = null;
     let lastError = null;
     for (const url of attachments) {
@@ -322,8 +327,25 @@ async function main() {
   } catch (error) {
     const message = String(error?.message || error);
     mkdirSync(outDir, { recursive: true });
-    writeFileSync(join(outDir, 'status.json'), JSON.stringify({ ok: false, error: message }, null, 2) + '\n');
-    writeFileSync(join(outDir, 'error.md'), `### ❌ 投稿未通过\n\n${message}\n\n请修正后编辑本 Issue 正文重新提交。\n`);
+    const validateFailed = command === 'validate';
+    const reason = validateFailed && /附件/.test(message) ? 'missing-attachment' : 'invalid';
+    writeFileSync(join(outDir, 'status.json'), JSON.stringify({ ok: false, error: message, reason }, null, 2) + '\n');
+    const footer = validateFailed
+      ? [
+          '',
+          '---',
+          '',
+          '### 如何修复',
+          '',
+          '1. 打开上传页重新生成（本地文件已删除时）：https://taoruiliu19.github.io/gsv-market/upload.html',
+          '2. 点击本 Issue 右上角 **Edit**，把 `.gsvvoice` 文件拖进正文（不是只写文件名）',
+          '3. 保存后会自动重新校验；通过后标签会变为 `validated`',
+          '',
+          '> 手机端不方便拖拽附件，建议用桌面浏览器。',
+          '',
+        ].join('\n')
+      : '\n请查看 Actions 日志；修复后重新添加 `approved` 标签重试。\n';
+    writeFileSync(join(outDir, 'error.md'), `### ❌ ${validateFailed ? '投稿未通过' : '发布失败'}\n\n${message}\n${footer}`);
     console.log(`::error::${message}`);
     process.exitCode = 1;
   }
